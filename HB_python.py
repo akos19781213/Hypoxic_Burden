@@ -8,75 +8,62 @@ from scipy.signal import filtfilt, find_peaks, remez
 from tqdm import tqdm
 
 # ──────────────────────────────────────────
-# Lightweight stand‑in "struct" classes
+# 간단한 구조체 대용 클래스로 데이터 보관
 # ──────────────────────────────────────────
 class SpO2Struct:
-    """Container for SpO2 signal and sample rate."""
-
     def __init__(self, sig, sr=1):
         self.sig = sig
         self.sr = sr
 
-
 class RespEventsStruct:
-    """Container for respiratory event annotations."""
-
     def __init__(self, ev_type, start, duration):
         self.type = ev_type
         self.start = np.asarray(start)
         self.duration = np.asarray(duration)
 
-
 class SleepStageStruct:
-    """Container for sleep‑stage hypnogram (per‑second, integer codes)."""
-
     def __init__(self, annotation, sr=1):
         self.annotation = annotation
         self.sr = sr
 
-
 # ──────────────────────────────────────────
-# calc_hb  — Python port of MATLAB calcHB v1.1
+# calc_hb  (MATLAB calcHB v1.1 포팅)
 # ──────────────────────────────────────────
-
 def calc_hb(spo2, events, stage):
-    """Compute Hypoxic Burden (%·min per hr) for a single night.
-
-    Parameters
-    ----------
-    spo2 : SpO2Struct
-        Oxygen saturation trace sampled at 1 Hz.
-    events : RespEventsStruct
-        Apnoea/hypopnoea events (start time & duration in seconds).
-    stage : SleepStageStruct
-        Per‑second sleep stage codes (0 = wake, 1/2/3 = NREM, 5 = REM, 9 = indeterminate).
-    """
-
-    # Sample‑rate check (assume 1 Hz throughout)
+    # 샘플레이트 검사 (1 Hz 전제)
     if spo2.sr != 1 or stage.sr != 1:
-        raise ValueError("SpO2 and sleep‑stage sample rates must both be 1 Hz.")
+        raise ValueError("SpO2와 SleepStage 샘플레이트는 1 Hz 이어야 합니다.")
 
     if len(events.type) == 0:
-        return float("nan")
+        return float('nan')
 
-    # Replace physiologically impossible SpO2 values with NaN
+    # 물리적으로 불가능한 SpO2 값을 NaN 으로
     spo2_phys = spo2.sig.astype(float)
     spo2_phys[(spo2_phys < 50) | (spo2_phys > 100)] = np.nan
 
     num_events = len(events.type)
     sig_len = len(spo2_phys)
 
-    # Mean event duration & inter‑event gap
+    # 평균 이벤트 길이·간격
     dur_avg = int(math.ceil(float(np.nanmean(events.duration))))
+
+    # print(events.duration)
+
+    # print("duravg:", dur_avg)
 
     if len(events.start) > 1:
         gap_avg = int(math.ceil(float(np.nanmean(np.diff(events.start)))))
     else:
-        gap_avg = 60  # fallback gap (s)
+        gap_avg = 60
 
-    # Event‑aligned average
-    win_pts = 240 * spo2.sr + 1        # −120 s … +120 s window
+    # print("gap_avg:", gap_avg)
+
+    # 이벤트 정렬‑평균
+    win_pts = 240 * spo2.sr + 1        # -120 s ~ +120 s
     evt_mat = np.full((win_pts, num_events), np.nan)
+
+    # print("win_pts:", win_pts)
+    # print("evt_mat:", evt_mat)
 
     for k in range(num_events):
         finish = events.start[k] + events.duration[k]
@@ -88,7 +75,7 @@ def calc_hb(spo2, events, stage):
 
     spo2_avg = np.nanmean(evt_mat, axis=1)
 
-    # 0.03 Hz low‑pass FIR filter
+    # 0.03 Hz 저역통과 FIR 필터
     if spo2.sr == 1:
         B = np.array([
             1.09398212241e-04, 5.14594526374e-04, 1.35039717994e-03,
@@ -108,13 +95,13 @@ def calc_hb(spo2, events, stage):
         B = remez(filt_len + 1, [0, 1/30, 1/15, 0.5], [1, 0], Hz=spo2.sr)
     spo2_filt = filtfilt(B, [1.0], spo2_avg)
 
-    # Crop average response window
+    # 평균 응답 구간 자르기
     s_idx = 120 * spo2.sr + 1 - dur_avg * spo2.sr
     e_idx = 120 * spo2.sr + 1 + min(90, gap_avg) * spo2.sr
     time_zero = dur_avg
     spo2_resp = spo2_filt[s_idx:e_idx + 1]
 
-    # Identify nadir & bounding peaks
+    # Nadir, 창 시작·끝 찾기
     nadir_idx = None
     win_start = None
     win_end = None
@@ -125,7 +112,7 @@ def calc_hb(spo2, events, stage):
         nadir_idx = neg_idx[big_peak_pos]
         nadir_val = -neg_peaks[big_peak_pos]
 
-        # Left (onset) peak
+        # 왼쪽 피크
         pk_left, idx_left = find_peaks(spo2_resp[:nadir_idx])
         if len(idx_left) > 0:
             max_on = pk_left.max()
@@ -133,7 +120,7 @@ def calc_hb(spo2, events, stage):
             if len(ok) > 0:
                 win_start = ok[-1]
 
-        # Right (offset) peak
+        # 오른쪽 피크
         pk_right, idx_right = find_peaks(spo2_resp[nadir_idx:])
         if len(idx_right) > 0:
             max_off = pk_right.max()
@@ -142,14 +129,14 @@ def calc_hb(spo2, events, stage):
                 win_end = ok[0] + nadir_idx
 
     if nadir_idx is None or win_start is None or win_end is None:
-        warnings.warn("Window search failed — falling back to default limits")
+        warnings.warn("창 탐색 실패, 기본값 사용")
         win_start = time_zero - 5
         win_end = time_zero + 45
 
     win_start -= time_zero
     win_end -= time_zero
 
-    # Sum area (%·min) for each event
+    # 각 이벤트 면적 합산
     pct_min_total = 0.0
     limit_idx = 0
 
@@ -170,18 +157,16 @@ def calc_hb(spo2, events, stage):
         pct_min_total += np.nansum(seg) / 60.0
         limit_idx = seg_end
 
-    # Normalise by sleep time (h)
+    # 수면 시간 보정
     sleep_mask = (stage.annotation > 0) & (stage.annotation < 9)
     hours_sleep = float(np.sum(~np.isnan(spo2_phys[sleep_mask]))) / 3600.0
     if hours_sleep == 0:
-        return float("nan")
+        return float('nan')
     return pct_min_total / hours_sleep
 
-
 # ──────────────────────────────────────────
-# XML parser (based on <ScoredEvent> blocks)
+# XML 파서 (ScoredEvent 기반)
 # ──────────────────────────────────────────
-
 stage_map = {
     "Wake|0": 0,
     "Stage 1 sleep|1": 1,
@@ -190,22 +175,19 @@ stage_map = {
     "REM sleep|5": 5
 }
 
-
 def parse_xml(xml_path, spo2_len):
-    """Parse NSRR XML annotation and return events + sleep stages."""
-
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
     ev_type, ev_start, ev_dur = [], [], []
-    hyp = np.full(spo2_len, 9, dtype=np.int16)  # default = Indeterminate
+    hyp = np.full(spo2_len, 9, dtype=np.int16)  # 기본값 = Indeterminant
 
     for node in root.findall('.//ScoredEvent'):
         label = node.findtext('EventConcept', '')
         start = float(node.findtext('Start', '0'))
         duration = float(node.findtext('Duration', '0'))
 
-        # Sleep stage
+        # 수면 단계
         if label in stage_map:
             code = stage_map[label]
             beg = int(start)
@@ -214,11 +196,19 @@ def parse_xml(xml_path, spo2_len):
             hyp[beg:end] = code
             continue
 
-        # AHI‑related events
+        # AHI 관련 이벤트
         low = label.lower()
         if 'apnea' in low and 'hypopnea' not in low:
             ev_type.append('Apnea')
         elif 'hypopnea' in low:
             ev_type.append('Hypopnea')
         elif 'unsure' in low:
-            ev_type.append
+            ev_type.append('Unsure')
+        else:
+            continue
+        ev_start.append(start)
+        ev_dur.append(duration)
+
+    events = RespEventsStruct(ev_type, ev_start, ev_dur)
+    stage = SleepStageStruct(hyp)
+    return events, stage
