@@ -167,7 +167,7 @@ def parse_xml(xml_path, spo2_len):
     root = tree.getroot()
 
     ev_type, ev_start, ev_dur = [], [], []
-    hyp = np.full(spo2_len, 9, dtype=np.int16)  # Default
+    hyp = np.full(spo2_len, 9, dtype=np.int16)  # 기본값 = Indeterminant
 
     for node in root.findall('.//ScoredEvent'):
         label = node.findtext('EventConcept', '')
@@ -274,7 +274,12 @@ def main():
 
     try:
         print(f"SpO2 length: {len(spo2.sig)}, SR: {spo2.sr}")
-        print(f"Events: {events.type}, Start: {events.start}, Duration: {events.duration}")
+		# Count events grouped by type
+        from collections import Counter
+        event_counts = Counter(events.type)
+        print("Event counts by type:")
+        for event_type, count in event_counts.items():
+            print(f"{event_type}: {count}")
         hb_value = calc_hb(spo2, events, stage)
         print(f"\nHypoxic Burden value: {hb_value:.4f}")
     except Exception as e:
