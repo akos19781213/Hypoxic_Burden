@@ -202,7 +202,7 @@ def import_apnealink_edf(edf_path):
     # Find SpO2 channel
     spo2_idx = None
     for i, ch in enumerate(raw.ch_names):
-        if 'Saturation' in ch.lower():
+        if ch.startswith("Saturation"):
             spo2_idx = i
             break
     if spo2_idx is None:
