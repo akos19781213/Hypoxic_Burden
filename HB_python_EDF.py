@@ -5,7 +5,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 import sys
 import argparse
-from scipy.signal import filtfilt, find_peaks, remez
+from scipy.signal import filtfilt, find_peaks, remez, resample
 from tqdm import tqdm
 
 # Use mne for tolerant EDF reading
@@ -163,7 +163,7 @@ def parse_xml(xml_path, spo2_len):
     root = tree.getroot()
 
     ev_type, ev_start, ev_dur = [], [], []
-    hyp = np.full(spo2_len, 9, dtype=np.int16)  # 기본값 = Indeterminant
+    hyp = np.full(spo2_len, 9, dtype=np.int16)  # Default
 
     for node in root.findall('.//ScoredEvent'):
         label = node.findtext('EventConcept', '')
@@ -210,7 +210,13 @@ def import_apnealink_edf(edf_path):
 
     spo2 = raw.get_data(picks=[spo2_idx]).flatten()
     sr = int(raw.info['sfreq'])
-
+    
+    # Resample to 1 Hz
+    if sr != 1:
+        target_length = int(len(spo2) / sr)
+        spo2 = resample(spo2, target_length)
+        sr = 1
+        
     # Read annotations/events
     events_type = []
     events_start = []
