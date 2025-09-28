@@ -1,4 +1,4 @@
-# Hypoxic_Burden with Windows GUI and ApneaLink EDF+ file support
+# Hypoxic Burden calculation with Windows GUI and ApneaLink EDF+ file support
 
 A pure Python reimplementation of the Hypoxic Burden algorithm described in:
 
