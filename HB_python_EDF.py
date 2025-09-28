@@ -94,24 +94,24 @@ def calc_hb(spo2, events, stage):
     win_end = None
 
     neg_peaks, neg_idx = find_peaks(-spo2_resp)
+    neg_idx, _ = find_peaks(-spo2_resp)
     if len(neg_idx) > 0:
-        big_peak_pos = int(np.argmax(neg_peaks))
-        nadir_idx = neg_idx[big_peak_pos]
-        nadir_val = -neg_peaks[big_peak_pos]
+        nadir_idx = neg_idx[np.argmax(-spo2_resp[neg_idx])]
+        nadir_val = spo2_resp[nadir_idx]
 
-        pk_left, idx_left = find_peaks(spo2_resp[:nadir_idx])
-        if len(idx_left) > 0:
-            max_on = pk_left.max()
-            ok = idx_left[pk_left - nadir_val > 0.75 * (max_on - nadir_val)]
-            if len(ok) > 0:
-                win_start = ok[-1]
+        pk_left, _ = find_peaks(spo2_resp[:nadir_idx])
+        if len(pk_left) > 0:
+            max_on = spo2_resp[pk_left].max()
+            ok_left = pk_left[spo2_resp[pk_left] - nadir_val > 0.75 * (max_on - nadir_val)]
+            if len(ok_left) > 0:
+                win_start = ok_left[-1]
 
-        pk_right, idx_right = find_peaks(spo2_resp[nadir_idx:])
-        if len(idx_right) > 0:
-            max_off = pk_right.max()
-            ok = idx_right[pk_right - nadir_val > 0.75 * (max_off - nadir_val)]
-            if len(ok) > 0:
-                win_end = ok[0] + nadir_idx
+        pk_right, _ = find_peaks(spo2_resp[nadir_idx:])
+        if len(pk_right) > 0:
+            max_off = spo2_resp[nadir_idx + pk_right].max()
+            ok_right = pk_right[spo2_resp[nadir_idx + pk_right] - nadir_val > 0.75 * (max_off - nadir_val)]
+            if len(ok_right) > 0:
+                win_end = ok_right[0] + nadir_idx
 
     if nadir_idx is None or win_start is None or win_end is None:
         warnings.warn("Window navigation failed, using default value")
