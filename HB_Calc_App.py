@@ -10,7 +10,7 @@ import HB_python_EDF
 class HypoxicBurdenApp:
     def __init__(self, master):
         self.master = master
-        master.title("Hypoxic Burden Calculator")
+        master.title("Hypoxic Burden Calculator (ApneaLink EDF+ file)")
 
         # File selection
         self.infile_path = tk.StringVar()
@@ -66,6 +66,8 @@ class HypoxicBurdenApp:
             for event_type, count in event_counts.items():
                 self.write_console(f"{event_type}: {count}\n")
             hb_value = HB_python_EDF.calc_hb(spo2, events, stage)
+            hb_value, hours, minutes, hours_sleep = HB_python_EDF.calc_hb(spo2, events, stage)
+            self.write_console(f"Hours sleep: {hours}h {minutes}m ({hours_sleep:.2f} hours)\n")
             self.write_console(f"\nHypoxic Burden value: {hb_value:.4f}\n")
         except Exception as e:
             self.write_console(f"\nError calculating Hypoxic Burden: {e}\n")
