@@ -12,7 +12,7 @@ from tqdm import tqdm
 import mne
 
 # ──────────────────────────────────────────
-# 간단한 구조체 대용 클래스로 데이터 보관
+# A simple class serving as a substitute for a structure for data storage
 # ──────────────────────────────────────────
 class SpO2Struct:
     def __init__(self, sig, sr=1):
@@ -31,11 +31,11 @@ class SleepStageStruct:
         self.sr = sr
 
 # ──────────────────────────────────────────
-# calc_hb  (MATLAB calcHB v1.1 포팅)
+# calc_hb  (MATLAB calcHB v1.1 Porting)
 # ──────────────────────────────────────────
 def calc_hb(spo2, events, stage):
     if spo2.sr != 1 or stage.sr != 1:
-        raise ValueError("SpO2와 SleepStage 샘플레이트는 1 Hz 이어야 합니다.")
+        raise ValueError("The SpO₂ and SleepStage sample rate must be 1 Hz.")
 
     if len(events.type) == 0:
         return float('nan')
@@ -114,7 +114,7 @@ def calc_hb(spo2, events, stage):
                 win_end = ok[0] + nadir_idx
 
     if nadir_idx is None or win_start is None or win_end is None:
-        warnings.warn("창 탐색 실패, 기본값 사용")
+        warnings.warn("Window navigation failed, using default value")
         win_start = time_zero - 5
         win_end = time_zero + 45
 
@@ -148,7 +148,7 @@ def calc_hb(spo2, events, stage):
     return pct_min_total / hours_sleep
 
 # ──────────────────────────────────────────
-# XML 파서 (ScoredEvent 기반)
+# XML Parser (ScoredEvent-based)
 # ──────────────────────────────────────────
 stage_map = {
     "Wake|0": 0,
@@ -195,7 +195,7 @@ def parse_xml(xml_path, spo2_len):
     return events, stage
 
 # ──────────────────────────────────────────
-# ApneaLink EDF+ 파서 (MNE-Python based)
+# ApneaLink EDF+ Parser (MNE-Python based)
 # ──────────────────────────────────────────
 def import_apnealink_edf(edf_path):
     raw = mne.io.read_raw_edf(edf_path, preload=True, verbose='error')
