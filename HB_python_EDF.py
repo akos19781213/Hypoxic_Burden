@@ -143,6 +143,7 @@ def calc_hb(spo2, events, stage):
 
     sleep_mask = (stage.annotation > 0) & (stage.annotation < 9)
     hours_sleep = float(np.sum(~np.isnan(spo2_phys[sleep_mask]))) / 3600.0
+    print(f"Hours sleep: {hours_sleep}")
     if hours_sleep == 0:
         return float('nan')
     return pct_min_total / hours_sleep
@@ -163,7 +164,7 @@ def parse_xml(xml_path, spo2_len):
     root = tree.getroot()
 
     ev_type, ev_start, ev_dur = [], [], []
-    hyp = np.full(spo2_len, 9, dtype=np.int16)  # Default
+    hyp = np.full(spo2_len, 9, dtype=np.int16)  # 기본값 = Indeterminant
 
     for node in root.findall('.//ScoredEvent'):
         label = node.findtext('EventConcept', '')
@@ -236,7 +237,7 @@ def import_apnealink_edf(edf_path):
         events_start.append(float(ann['onset']))
         events_duration.append(float(ann['duration']))
 
-    hyp_dummy = np.full(len(spo2), 9, dtype=np.int16)
+    hyp_dummy = np.full(len(spo2), 2, dtype=np.int16)
     sleep_stage_struct = SleepStageStruct(hyp_dummy, sr=sr)
 
     spo2_struct = SpO2Struct(sig=spo2, sr=sr)
@@ -269,6 +270,8 @@ def main():
         sys.exit(1)
 
     try:
+        print(f"SpO2 length: {len(spo2.sig)}, SR: {spo2.sr}")
+        print(f"Events: {events.type}, Start: {events.start}, Duration: {events.duration}")
         hb_value = calc_hb(spo2, events, stage)
         print(f"\nHypoxic Burden value: {hb_value:.4f}")
     except Exception as e:
