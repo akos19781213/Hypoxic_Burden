@@ -1,6 +1,5 @@
 import os
 import math
-import csv
 import warnings
 import numpy as np
 import xml.etree.ElementTree as ET
@@ -9,14 +8,11 @@ import argparse
 from scipy.signal import filtfilt, find_peaks, remez
 from tqdm import tqdm
 
-# Optional import for EDF+ support
-try:
-    import pyedflib
-except ImportError:
-    pyedflib = None
+# Use mne for tolerant EDF reading
+import mne
 
 # ──────────────────────────────────────────
-# A simple class serving as a substitute for a structure for data storage
+# 간단한 구조체 대용 클래스로 데이터 보관
 # ──────────────────────────────────────────
 class SpO2Struct:
     def __init__(self, sig, sr=1):
@@ -35,11 +31,11 @@ class SleepStageStruct:
         self.sr = sr
 
 # ──────────────────────────────────────────
-# calc_hb  (MATLAB calcHB v1.1 Porting)
+# calc_hb  (MATLAB calcHB v1.1 포팅)
 # ──────────────────────────────────────────
 def calc_hb(spo2, events, stage):
     if spo2.sr != 1 or stage.sr != 1:
-        raise ValueError("The SpO₂ and SleepStage sample rate must be 1 Hz.")
+        raise ValueError("SpO2와 SleepStage 샘플레이트는 1 Hz 이어야 합니다.")
 
     if len(events.type) == 0:
         return float('nan')
@@ -118,7 +114,7 @@ def calc_hb(spo2, events, stage):
                 win_end = ok[0] + nadir_idx
 
     if nadir_idx is None or win_start is None or win_end is None:
-        warnings.warn("Time window navigation failed, using default value")
+        warnings.warn("창 탐색 실패, 기본값 사용")
         win_start = time_zero - 5
         win_end = time_zero + 45
 
@@ -152,7 +148,7 @@ def calc_hb(spo2, events, stage):
     return pct_min_total / hours_sleep
 
 # ──────────────────────────────────────────
-# XML Parser (ScoredEvent-based)  Not used with EDF file
+# XML 파서 (ScoredEvent 기반)
 # ──────────────────────────────────────────
 stage_map = {
     "Wake|0": 0,
@@ -199,35 +195,28 @@ def parse_xml(xml_path, spo2_len):
     return events, stage
 
 # ──────────────────────────────────────────
-# ApneaLink EDF+ Parser
+# ApneaLink EDF+ 파서 (MNE-Python based)
 # ──────────────────────────────────────────
 def import_apnealink_edf(edf_path):
-    if pyedflib is None:
-        raise ImportError("pyedflib is required for EDF+ file support. Install it with 'pip install pyedflib'.")
-
-    f = pyedflib.EdfReader(edf_path)
-    n_signals = f.signals_in_file
-    channel_labels = f.getSignalLabels()
-
+    raw = mne.io.read_raw_edf(edf_path, preload=True, verbose='error')
     # Find SpO2 channel
     spo2_idx = None
-    for i, label in enumerate(channel_labels):
-        if 'saturation' in label.lower():
+    for i, ch in enumerate(raw.ch_names):
+        if 'Saturation' in ch.lower():
             spo2_idx = i
             break
     if spo2_idx is None:
         raise ValueError("Could not find SpO2 channel named 'Saturation' in EDF file.")
 
-    spo2 = f.readSignal(spo2_idx)
-    sr = int(f.getSampleFrequency(spo2_idx))
+    spo2 = raw.get_data(picks=[spo2_idx]).flatten()
+    sr = int(raw.info['sfreq'])
 
     # Read annotations/events
     events_type = []
     events_start = []
     events_duration = []
-    annotations = f.readAnnotations()
-    for onset, duration, description in zip(*annotations):
-        desc = description.lower()
+    for ann in raw.annotations:
+        desc = ann['description'].lower()
         if 'hypopnea' in desc:
             events_type.append('Hypopnea')
         elif 'obstructi' in desc:
@@ -238,15 +227,14 @@ def import_apnealink_edf(edf_path):
             events_type.append('Central')
         else:
             continue
-        events_start.append(float(onset))
-        events_duration.append(float(duration))
+        events_start.append(float(ann['onset']))
+        events_duration.append(float(ann['duration']))
 
-    spo2_struct = SpO2Struct(sig=np.array(spo2), sr=sr)
-    events_struct = RespEventsStruct(events_type, events_start, events_duration)
-    hyp_dummy = np.full(len(spo2_struct.sig), 9, dtype=np.int16)
+    hyp_dummy = np.full(len(spo2), 9, dtype=np.int16)
     sleep_stage_struct = SleepStageStruct(hyp_dummy, sr=sr)
 
-    f.close()
+    spo2_struct = SpO2Struct(sig=spo2, sr=sr)
+    events_struct = RespEventsStruct(events_type, events_start, events_duration)
     return spo2_struct, events_struct, sleep_stage_struct
 
 # ──────────────────────────────────────────
