@@ -143,7 +143,10 @@ def calc_hb(spo2, events, stage):
 
     sleep_mask = (stage.annotation > 0) & (stage.annotation < 9)
     hours_sleep = float(np.sum(~np.isnan(spo2_phys[sleep_mask]))) / 3600.0
-    print(f"Hours sleep: {hours_sleep}")
+	# Convert hours_sleep to hours and minutes format
+    hours = int(hours_sleep)
+    minutes = int(round((hours_sleep - hours) * 60))
+    print(f"Hours sleep: {hours}h {minutes}m ({hours_sleep:.2f} hours)")
     if hours_sleep == 0:
         return float('nan')
     return pct_min_total / hours_sleep
@@ -164,7 +167,7 @@ def parse_xml(xml_path, spo2_len):
     root = tree.getroot()
 
     ev_type, ev_start, ev_dur = [], [], []
-    hyp = np.full(spo2_len, 9, dtype=np.int16)  # 기본값 = Indeterminant
+    hyp = np.full(spo2_len, 9, dtype=np.int16)  # Default
 
     for node in root.findall('.//ScoredEvent'):
         label = node.findtext('EventConcept', '')
