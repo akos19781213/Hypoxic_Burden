@@ -148,8 +148,8 @@ def calc_hb(spo2, events, stage):
     minutes = int(round((hours_sleep - hours) * 60))
     print(f"Hours sleep: {hours}h {minutes}m ({hours_sleep:.2f} hours)")
     if hours_sleep == 0:
-        return float('nan')
-    return pct_min_total / hours_sleep
+        return float('nan'), hours, minutes, hours_sleep
+    return pct_min_total / hours_sleep, hours, minutes, hours_sleep
 
 # ──────────────────────────────────────────
 # XML Parser (ScoredEvent-based)
